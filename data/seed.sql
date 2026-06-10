@@ -2,6 +2,17 @@
 -- SaaS Metrics Sample Dataset
 -- ============================================================
 
+CREATE TABLE IF NOT EXISTS query_history (
+    id          SERIAL PRIMARY KEY,
+    question    TEXT NOT NULL,
+    sql         TEXT,
+    row_count   INT,
+    insight     TEXT,
+    error       TEXT,
+    retry_count INT DEFAULT 0,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS companies (
     company_id    SERIAL PRIMARY KEY,
     name          VARCHAR(100) NOT NULL,

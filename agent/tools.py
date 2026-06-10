@@ -84,3 +84,61 @@ def build_chart(chart_config: dict, rows: list[dict]) -> dict | None:
     )
 
     return json.loads(fig.to_json())
+
+
+# ── Query history ─────────────────────────────────────────────────────────────
+
+_HISTORY_DDL = """
+CREATE TABLE IF NOT EXISTS query_history (
+    id          SERIAL PRIMARY KEY,
+    question    TEXT NOT NULL,
+    sql         TEXT,
+    row_count   INT,
+    insight     TEXT,
+    error       TEXT,
+    retry_count INT DEFAULT 0,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+)
+"""
+
+
+def log_query(
+    question: str,
+    sql: str,
+    row_count: int,
+    insight: str,
+    error: str | None,
+    retry_count: int,
+) -> None:
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(text(_HISTORY_DDL))
+        conn.execute(
+            text(
+                """
+                INSERT INTO query_history (question, sql, row_count, insight, error, retry_count)
+                VALUES (:question, :sql, :row_count, :insight, :error, :retry_count)
+                """
+            ),
+            {
+                "question": question,
+                "sql": sql,
+                "row_count": row_count,
+                "insight": insight,
+                "error": error,
+                "retry_count": retry_count,
+            },
+        )
+
+
+def get_history(limit: int = 20) -> list[dict]:
+    engine = get_engine()
+    with engine.connect() as conn:
+        result = conn.execute(
+            text(
+                "SELECT * FROM query_history ORDER BY created_at DESC LIMIT :limit"
+            ),
+            {"limit": limit},
+        )
+        keys = list(result.keys())
+        return [dict(zip(keys, row)) for row in result.fetchall()]

@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from agent.graph import run_query
+from agent.tools import log_query, get_history
 
 app = FastAPI(
     title="SQL Business Intelligence Agent",
@@ -34,6 +35,17 @@ class QueryResponse(BaseModel):
     error: str | None
 
 
+class HistoryItem(BaseModel):
+    id: int
+    question: str
+    sql: str | None
+    row_count: int | None
+    insight: str | None
+    error: str | None
+    retry_count: int
+    created_at: str
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -49,6 +61,18 @@ def query(request: QueryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+    try:
+        log_query(
+            question=result["question"],
+            sql=result["sql"],
+            row_count=len(result["rows"]),
+            insight=result["insight"],
+            error=result["error"],
+            retry_count=result["retry_count"],
+        )
+    except Exception:
+        pass  # never let history logging break the main response
+
     return QueryResponse(
         question=result["question"],
         sql=result["sql"],
@@ -58,3 +82,14 @@ def query(request: QueryRequest):
         retries=result["retry_count"],
         error=result["error"],
     )
+
+
+@app.get("/history", response_model=list[HistoryItem])
+def history(limit: int = 20):
+    try:
+        return [
+            {**item, "created_at": str(item["created_at"])}
+            for item in get_history(limit)
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
